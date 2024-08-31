@@ -1,0 +1,13 @@
+{
+  "name": "ffmpeg-emsc",
+  "version": "1.0.0",
+  "type" : "module",
+  "scripts": {
+    "dev": "nodemon"
+  },
+  "author": "Will Alicar",
+  "devDependencies": {
+    "express": "^4.18.2",
+    "nodemon": "^3.0.3"
+  }
+}

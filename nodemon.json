@@ -1,0 +1,5 @@
+{
+    "watch": ["web/"],
+    "ext": "js,html",
+    "exec": "node test/local.js"
+}

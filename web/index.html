@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>ffmpeg-emsc</title>
+  <link rel="shortcut icon" type="image/svg+xml" href="/icon.svg?" />
+  <style>
+    input {
+      width: 100px;
+      margin: 5px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>ffmpeg-emsc</h1>
+  <div>
+    <input id="file" type="file">
+  </div>
+  <div id="results"></div>
+</body>
+
+<script>
+  const worker = new Worker('assets/worker.js');
+
+  const input = document.querySelector('input');
+  input.addEventListener('change', onFileChange);
+
+  worker.onmessage = (e) => {
+      const data = e.data;
+      const results = document.getElementById('results');
+      const ul = document.createElement('ul');
+      const li = document.createElement('li');
+      li.textContent = "format: " + data.format;
+      const li2 = document.createElement('li');
+      li2.textContent = "duration: " + data.duration;
+      const li3 = document.createElement('li');
+      li3.textContent = "streams: " + data.streams;
+      ul.appendChild(li);
+      ul.appendChild(li2);
+      ul.appendChild(li3);
+      results.appendChild(ul);
+  }
+
+  function onFileChange(event) {
+      const file = input.files[0];
+      worker.postMessage([ file ]);
+  }
+
+</script>
+
+
+</html>
