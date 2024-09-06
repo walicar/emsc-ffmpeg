@@ -1,12 +1,13 @@
-# INITIAL_MEMORY = 30 MiB
+# INITIAL_MEMORY = 35 MiB
 main:
 	emcc app/main.cc -lembind \
 	-I./dist/include -L./dist/lib \
-	-lavcodec -lavformat -lavutil -lswresample \
-	-s INITIAL_MEMORY=31457280 \
+	-lavcodec -lavformat -lavutil -lswscale -lswresample -lx264 \
+	-s INITIAL_MEMORY=36700160 \
 	-s ALLOW_MEMORY_GROWTH=1 \
 	-lembind -lworkerfs.js \
     -pthread \
+	-flto \
 	-o web/assets/out.js
 
 init:

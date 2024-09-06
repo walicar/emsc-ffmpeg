@@ -17,34 +17,32 @@
   <div>
     <input id="file" type="file">
   </div>
-  <div id="results"></div>
+  <p id="status"></p>
+  <a id="dl"></p>
 </body>
 
 <script>
   const worker = new Worker('assets/worker.js');
-
   const input = document.querySelector('input');
+
   input.addEventListener('change', onFileChange);
 
   worker.onmessage = (e) => {
-      const data = e.data;
-      const results = document.getElementById('results');
-      const ul = document.createElement('ul');
-      const li = document.createElement('li');
-      li.textContent = "format: " + data.format;
-      const li2 = document.createElement('li');
-      li2.textContent = "duration: " + data.duration;
-      const li3 = document.createElement('li');
-      li3.textContent = "streams: " + data.streams;
-      ul.appendChild(li);
-      ul.appendChild(li2);
-      ul.appendChild(li3);
-      results.appendChild(ul);
+    const result = e.data;
+    if (result != "bad") {
+        const url = URL.createObjectURL(result);
+        const dl = document.getElementById("dl")
+        dl.href = url;
+        dl.download = 'output.mp4';
+        dl.textContent = "Download"
+    } else {
+      document.getElementById("status").textContent = "Failed to transcode"
+    }
   }
 
   function onFileChange(event) {
-      const file = input.files[0];
-      worker.postMessage([ file ]);
+    const file = input.files[0];
+    worker.postMessage([ file ]);
   }
 
 </script>

@@ -6,10 +6,16 @@ onmessage = (e) => {
   }
   FS.mount(WORKERFS, { files: [file] }, '/work');
 
-  const info = Module.Parse('/work/' + file.name);
-  console.log(info);
-
-  postMessage(info);
+  const info = Module.transcode('/work/' + file.name);
+  if (info == 0) {
+    // const files = FS.readdir("/");
+    // files.forEach(elm => console.log(elm));
+    const file = FS.readFile("/output.mp4")
+    const blob = new Blob([file], { type: "video/mp4" });
+    postMessage(blob);
+  } else {
+    postMessage("bad")
+  }
 
   FS.unmount('/work');
 }
