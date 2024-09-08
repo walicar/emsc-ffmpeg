@@ -23,7 +23,6 @@ extern "C" {
 const int DST_WIDTH = 1280;
 const int DST_HEIGHT = 720;
 
-AVStream *out_stream;
 struct SwsContext *sws_ctx;
 int vid_idx = 0;
 
@@ -31,6 +30,7 @@ typedef struct MediaContext {
   AVFormatContext *avfc;
   const AVCodec *avc;
   AVCodecContext *avcc;
+  AVStream *avs;
 } MediaContext;
 
 MediaContext *encoder;
@@ -104,14 +104,14 @@ int init(const char *filename) {
     exit(1);
   }
 
-  out_stream = avformat_new_stream(encoder->avfc, NULL);
+  encoder->avs = avformat_new_stream(encoder->avfc, NULL);
   if (avio_open(&encoder->avfc->pb, "output.mp4", AVIO_FLAG_WRITE) < 0) {
     fprintf(stderr, "Could not create output video stream\n");
     exit(1);
   }
 
   // Copy the codec parameters from the codec context to the stream's codecpar
-  if (avcodec_parameters_from_context(out_stream->codecpar, encoder->avcc) < 0) {
+  if (avcodec_parameters_from_context(encoder->avs->codecpar, encoder->avcc) < 0) {
     fprintf(stderr, "Failed to copy codec parameters to output stream\n");
     exit(1);
   }
@@ -148,17 +148,11 @@ int _transcode(std::string filename) {
   AVPacket *dec_pkt = av_packet_alloc();
   AVPacket *enc_pkt = av_packet_alloc();
 
-  int64_t pts = 0; // Manual PTS counter
   while (av_read_frame(decoder->avfc, dec_pkt) >= 0) {
-    if (dec_frame->pts == AV_NOPTS_VALUE) {
-      dec_frame->pts = pts++;
-    }
-
-    dec_frame->pts = av_rescale_q(dec_frame->pts, decoder->avfc->streams[vid_idx]->time_base, encoder->avcc->time_base);
     if (dec_pkt->stream_index == vid_idx) {
       if (avcodec_send_packet(decoder->avcc, dec_pkt) < 0) {
         fprintf(stderr, "Could not send packet to decoder, cleaning up...\n");
-        break; // Only break if there's an error
+        break;
       }
 
       int rf_res = 0;
@@ -171,18 +165,15 @@ int _transcode(std::string filename) {
           break;
         }
 
-        // Perform scaling (sws_scale)
         sws_scale(sws_ctx, (const uint8_t *const *)dec_frame->data,
                   dec_frame->linesize, 0, dec_frame->height, enc_frame->data,
                   enc_frame->linesize);
 
-        // Send frame to encoder
         if (avcodec_send_frame(encoder->avcc, enc_frame) < 0) {
           fprintf(stderr, "Could not send frame to encoder\n");
           break;
         }
 
-        // Receive encoded packets and write to file
         int rp_res = 0;
         while (rp_res >= 0) {
           rp_res = avcodec_receive_packet(encoder->avcc, enc_pkt);
@@ -192,9 +183,7 @@ int _transcode(std::string filename) {
             fprintf(stderr, "Encoder could not receive encoded packet\n");
             break;
           }
-          av_packet_rescale_ts(enc_pkt, encoder->avcc->time_base, out_stream->time_base);
-
-          enc_pkt->stream_index = out_stream->index;
+          av_packet_rescale_ts(enc_pkt, encoder->avcc->time_base, encoder->avs->time_base);
 
           if (av_write_frame(encoder->avfc, enc_pkt) < 0) {
             fprintf(stderr, "Could not write frame to encoded packet\n");
@@ -208,33 +197,29 @@ int _transcode(std::string filename) {
     }
   }
 
-  // Flush the decoder and encoder after the input file is fully read
-  avcodec_send_packet(decoder->avcc, NULL); // Flush decoder
+  avcodec_send_packet(decoder->avcc, NULL);
   while (avcodec_receive_frame(decoder->avcc, dec_frame) >= 0) {
-    // Scale and encode remaining frames
     sws_scale(sws_ctx, (const uint8_t *const *)dec_frame->data,
               dec_frame->linesize, 0, dec_frame->height, enc_frame->data,
               enc_frame->linesize);
 
     avcodec_send_frame(encoder->avcc, enc_frame);
     while (avcodec_receive_packet(encoder->avcc, enc_pkt) >= 0) {
-      enc_pkt->stream_index = out_stream->index;
+      enc_pkt->stream_index = encoder->avs->index;
       av_write_frame(encoder->avfc, enc_pkt);
       av_packet_unref(enc_pkt);
     }
   }
 
-  avcodec_send_frame(encoder->avcc, NULL); // Flush encoder
+  avcodec_send_frame(encoder->avcc, NULL);
   while (avcodec_receive_packet(encoder->avcc, enc_pkt) >= 0) {
-    enc_pkt->stream_index = out_stream->index;
+    enc_pkt->stream_index = encoder->avs->index;
     av_write_frame(encoder->avfc, enc_pkt);
     av_packet_unref(enc_pkt);
   }
 
-  // Finalize writing
   av_write_trailer(encoder->avfc);
 
-  // cleanup
   avio_closep(&encoder->avfc->pb);
   avformat_close_input(&decoder->avfc);
   avformat_close_input(&encoder->avfc);
