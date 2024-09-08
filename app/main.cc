@@ -51,6 +51,7 @@ int init(const char *filename) {
   }
 
   vid_idx = av_find_best_stream(decoder->avfc, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
+  decoder->avs = decoder->avfc->streams[vid_idx];
   AVCodecParameters *params = decoder->avfc->streams[vid_idx]->codecpar;
 
   decoder->avc = avcodec_find_decoder(params->codec_id);
@@ -76,7 +77,8 @@ int init(const char *filename) {
   }
 
   // setup output
-  if (avformat_alloc_output_context2(&encoder->avfc, NULL, NULL, "output.mp4") < 0) {
+  if (avformat_alloc_output_context2(&encoder->avfc, NULL, NULL, "output.mp4") <
+      0) {
     fprintf(stderr, "Could not open output file to get format\n");
     exit(1);
   }
@@ -97,6 +99,7 @@ int init(const char *filename) {
   encoder->avcc->width = DST_WIDTH;
   encoder->avcc->height = DST_WIDTH;
   encoder->avcc->time_base = (AVRational){1, 24};
+  encoder->avs->time_base = encoder->avcc->time_base;
   encoder->avcc->pix_fmt = AV_PIX_FMT_YUV420P;
 
   if (avcodec_open2(encoder->avcc, encoder->avc, NULL) < 0) {
@@ -111,7 +114,8 @@ int init(const char *filename) {
   }
 
   // Copy the codec parameters from the codec context to the stream's codecpar
-  if (avcodec_parameters_from_context(encoder->avs->codecpar, encoder->avcc) < 0) {
+  if (avcodec_parameters_from_context(encoder->avs->codecpar, encoder->avcc) <
+      0) {
     fprintf(stderr, "Failed to copy codec parameters to output stream\n");
     exit(1);
   }
@@ -122,8 +126,9 @@ int init(const char *filename) {
   }
 
   // setup sws
-  sws_ctx = sws_getContext(decoder->avcc->width, decoder->avcc->height, decoder->avcc->pix_fmt,
-                           encoder->avcc->width, encoder->avcc->height, AV_PIX_FMT_YUV420P,
+  sws_ctx = sws_getContext(decoder->avcc->width, decoder->avcc->height,
+                           decoder->avcc->pix_fmt, encoder->avcc->width,
+                           encoder->avcc->height, AV_PIX_FMT_YUV420P,
                            SWS_BILINEAR, NULL, NULL, NULL);
   if (!sws_ctx) {
     fprintf(stderr, "Could not get sws context\n");
@@ -169,6 +174,9 @@ int _transcode(std::string filename) {
                   dec_frame->linesize, 0, dec_frame->height, enc_frame->data,
                   enc_frame->linesize);
 
+        enc_frame->pts = av_rescale_q(enc_frame->pts, decoder->avcc->time_base,
+                                    decoder->avs->time_base);
+
         if (avcodec_send_frame(encoder->avcc, enc_frame) < 0) {
           fprintf(stderr, "Could not send frame to encoder\n");
           break;
@@ -183,7 +191,8 @@ int _transcode(std::string filename) {
             fprintf(stderr, "Encoder could not receive encoded packet\n");
             break;
           }
-          av_packet_rescale_ts(enc_pkt, encoder->avcc->time_base, encoder->avs->time_base);
+
+          enc_pkt->stream_index = 0;
 
           if (av_write_frame(encoder->avfc, enc_pkt) < 0) {
             fprintf(stderr, "Could not write frame to encoded packet\n");
