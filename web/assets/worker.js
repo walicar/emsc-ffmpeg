@@ -2,9 +2,17 @@ self.importScripts('out.js');
 onmessage = (e) => {
   const file = e.data[0];
   if (!FS.analyzePath('/work').exists) {
-      FS.mkdir('/work');
+    FS.mkdir('/work');
   }
   FS.mount(WORKERFS, { files: [file] }, '/work');
+
+  (function () {
+    console.log = function () {
+      for (var i = 0; i < arguments.length; i++) {
+        postMessage(["msg", arguments[0]])
+      }
+    }
+  })();
 
   const info = Module.transcode('/work/' + file.name);
   if (info == 0) {

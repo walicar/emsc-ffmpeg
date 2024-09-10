@@ -38,8 +38,15 @@ typedef struct MediaContext {
 MediaContext *encoder;
 MediaContext *decoder;
 
+char entry[512];
+
+EM_JS(void, call_log, (const char *text), {
+  console.log(UTF8ToString(text));
+});
+
 void custom_log_callback(void* ptr, int level, const char* fmt, va_list vargs) {
-    vfprintf(stdout, fmt, vargs);
+    vsnprintf(entry, sizeof(entry), fmt, vargs);
+    call_log(entry);
 }
 
 int init(const char *filename) {
