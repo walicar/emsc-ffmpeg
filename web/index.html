@@ -38,6 +38,14 @@
       align-items: center;
     }
 
+    .control-item {
+      margin-left: 50px;
+    }
+
+    #dl {
+      text-align: center;
+    }
+
   </style>
 </head>
 
@@ -49,8 +57,9 @@
       <br>
     </div>
     <div id="controls" class="item">
-      <input id="file" type="file">
-      <span><a id="dl">...</a></span>
+      <input class="control-item" id="file" type="file">
+      <input class="control-item" id="check" type="checkbox" checked>Auto scroll to bottom</input>
+      <a class="control-item" id="dl"></a>
     </div>
   </div>
 </body>
@@ -61,9 +70,13 @@
   const input = document.querySelector('input');
   const logs = document.getElementById('logs')
   const dl = document.getElementById("dl")
+  const check = document.getElementById("check")
+  var showTail = true;
   var start;
 
   input.addEventListener('change', onFileChange);
+  check.addEventListener('change', onCheckChange);
+  
 
   worker.onmessage = (e) => {
     const result = e.data;
@@ -75,8 +88,12 @@
       entry.textContent = timestamp + ": " + result[1];
       logs.appendChild(entry);
       logs.appendChild(document.createElement('br'))
-      logs.scrollTop = logs.scrollHeight
-    }else {
+
+      if (showTail) {
+        logs.scrollTop = logs.scrollHeight
+      }
+
+    } else {
       const url = URL.createObjectURL(result);
       dl.href = url;
       dl.download = 'output.mp4';
@@ -89,6 +106,10 @@
     const file = input.files[0];
     worker.postMessage([file]);
     dl.textContent = "Transcoding..."
+  }
+
+  function onCheckChange(event) {
+    showTail = !showTail;
   }
 
 </script>
