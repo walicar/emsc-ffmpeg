@@ -1,3 +1,14 @@
+/* Resources used:
+@ffmpeg
+https://github.com/leandromoreira/ffmpeg-libav-tutorial/blob/master/3_transcoding.c
+https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/transcode.c
+
+@emsc
+https://github.com/ffmpegwasm/ffmpeg.wasm/blob/main/build/ffmpeg-wasm.sh
+https://dev.to/alfg/ffmpeg-webassembly-2cbl
+
+*/
+
 #include <emscripten.h>
 #include <emscripten/bind.h>
 #include <inttypes.h>
