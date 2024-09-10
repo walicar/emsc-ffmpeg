@@ -17,6 +17,7 @@ extern "C" {
 #include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/rational.h>
 #include <libswscale/swscale.h>
 };
 
@@ -71,6 +72,9 @@ int init(const char *filename) {
     exit(1);
   }
 
+  decoder->avcc->pkt_timebase = decoder->avs->time_base;
+  decoder->avcc->framerate = av_guess_frame_rate(NULL, decoder->avs, NULL);
+
   if (avcodec_open2(decoder->avcc, decoder->avc, NULL) < 0) {
     fprintf(stderr, "Could not open decoder\n");
     exit(1);
@@ -95,12 +99,16 @@ int init(const char *filename) {
     exit(1);
   }
 
-  encoder->avcc->bit_rate = 1000000;
+  encoder->avcc->bit_rate = 1000;
   encoder->avcc->width = DST_WIDTH;
-  encoder->avcc->height = DST_WIDTH;
-  encoder->avcc->time_base = (AVRational){1, 24};
+  encoder->avcc->height = DST_HEIGHT;
+  encoder->avcc->time_base = av_inv_q(decoder->avcc->framerate);
+  encoder->avcc->framerate = decoder->avcc->framerate;
   encoder->avs->time_base = encoder->avcc->time_base;
   encoder->avcc->pix_fmt = AV_PIX_FMT_YUV420P;
+
+  if (encoder->avfc->oformat->flags & AVFMT_GLOBALHEADER)
+                encoder->avcc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
   if (avcodec_open2(encoder->avcc, encoder->avc, NULL) < 0) {
     fprintf(stderr, "Could not open encoder\n");
@@ -174,8 +182,7 @@ int _transcode(std::string filename) {
                   dec_frame->linesize, 0, dec_frame->height, enc_frame->data,
                   enc_frame->linesize);
 
-        enc_frame->pts = av_rescale_q(enc_frame->pts, decoder->avcc->time_base,
-                                    decoder->avs->time_base);
+        enc_frame->pts = dec_frame->pts;
 
         if (avcodec_send_frame(encoder->avcc, enc_frame) < 0) {
           fprintf(stderr, "Could not send frame to encoder\n");
@@ -193,6 +200,7 @@ int _transcode(std::string filename) {
           }
 
           enc_pkt->stream_index = 0;
+          av_packet_rescale_ts(enc_pkt, decoder->avs->time_base, encoder->avs->time_base); // important
 
           if (av_write_frame(encoder->avfc, enc_pkt) < 0) {
             fprintf(stderr, "Could not write frame to encoded packet\n");
@@ -211,10 +219,11 @@ int _transcode(std::string filename) {
     sws_scale(sws_ctx, (const uint8_t *const *)dec_frame->data,
               dec_frame->linesize, 0, dec_frame->height, enc_frame->data,
               enc_frame->linesize);
-
+    enc_frame->pts = dec_frame->pts;
     avcodec_send_frame(encoder->avcc, enc_frame);
     while (avcodec_receive_packet(encoder->avcc, enc_pkt) >= 0) {
       enc_pkt->stream_index = encoder->avs->index;
+      av_packet_rescale_ts(enc_pkt, decoder->avs->time_base, encoder->avs->time_base);
       av_write_frame(encoder->avfc, enc_pkt);
       av_packet_unref(enc_pkt);
     }
@@ -223,6 +232,7 @@ int _transcode(std::string filename) {
   avcodec_send_frame(encoder->avcc, NULL);
   while (avcodec_receive_packet(encoder->avcc, enc_pkt) >= 0) {
     enc_pkt->stream_index = encoder->avs->index;
+    av_packet_rescale_ts(enc_pkt, decoder->avs->time_base, encoder->avs->time_base);
     av_write_frame(encoder->avfc, enc_pkt);
     av_packet_unref(enc_pkt);
   }
