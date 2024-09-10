@@ -1,14 +1,3 @@
-/* Resources used:
-@ffmpeg
-https://github.com/leandromoreira/ffmpeg-libav-tutorial/blob/master/3_transcoding.c
-https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/transcode.c
-
-@emsc
-https://github.com/ffmpegwasm/ffmpeg.wasm/blob/main/build/ffmpeg-wasm.sh
-https://dev.to/alfg/ffmpeg-webassembly-2cbl
-
-*/
-
 #include <emscripten.h>
 #include <emscripten/bind.h>
 #include <inttypes.h>
@@ -30,6 +19,7 @@ extern "C" {
 #include <libavutil/imgutils.h>
 #include <libavutil/rational.h>
 #include <libswscale/swscale.h>
+#include <libavutil/log.h>
 };
 
 const int DST_WIDTH = 1280;
@@ -48,18 +38,22 @@ typedef struct MediaContext {
 MediaContext *encoder;
 MediaContext *decoder;
 
+void custom_log_callback(void* ptr, int level, const char* fmt, va_list vargs) {
+    vfprintf(stdout, fmt, vargs);
+}
+
 int init(const char *filename) {
   decoder = (MediaContext *)malloc(sizeof(MediaContext));
   encoder = (MediaContext *)malloc(sizeof(MediaContext));
 
   if (avformat_open_input(&decoder->avfc, filename, NULL, NULL) < 0) {
-    fprintf(stderr, "Could not open input file to get format\n");
-    exit(1);
+    printf("Could not open input file to get format\n");
+    return -1;
   }
 
   if (avformat_find_stream_info(decoder->avfc, NULL) < 0) {
-    fprintf(stderr, "Could not find input file stream info\n");
-    exit(1);
+    printf("Could not find input file stream info\n");
+    return -1;
   }
 
   vid_idx = av_find_best_stream(decoder->avfc, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
@@ -68,46 +62,46 @@ int init(const char *filename) {
 
   decoder->avc = avcodec_find_decoder(params->codec_id);
   if (!decoder->avc) {
-    fprintf(stderr, "Cannot find decoder %d\n", params->codec_id);
-    exit(1);
+    printf("Cannot find decoder %d\n", params->codec_id);
+    return -1;
   }
 
   decoder->avcc = avcodec_alloc_context3(decoder->avc);
   if (!decoder->avcc) {
-    fprintf(stderr, "Could not allocate decoder context\n");
-    exit(1);
+    printf("Could not allocate decoder context\n");
+    return -1;
   }
 
   if (avcodec_parameters_to_context(decoder->avcc, params) < 0) {
-    fprintf(stderr, "Could not copy decoder params to decoder context\n");
-    exit(1);
+    printf("Could not copy decoder params to decoder context\n");
+    return -1;
   }
 
   decoder->avcc->pkt_timebase = decoder->avs->time_base;
   decoder->avcc->framerate = av_guess_frame_rate(NULL, decoder->avs, NULL);
 
   if (avcodec_open2(decoder->avcc, decoder->avc, NULL) < 0) {
-    fprintf(stderr, "Could not open decoder\n");
-    exit(1);
+    printf("Could not open decoder\n");
+    return -1;
   }
 
   // setup output
   if (avformat_alloc_output_context2(&encoder->avfc, NULL, NULL, "output.mp4") <
       0) {
-    fprintf(stderr, "Could not open output file to get format\n");
-    exit(1);
+    printf("Could not open output file to get format\n");
+    return -1;
   }
 
   encoder->avc = avcodec_find_encoder_by_name("libx264");
   if (!encoder->avc) {
-    fprintf(stderr, "Cannot find encoder %d\n", params->codec_id);
-    exit(1);
+    printf("Cannot find encoder %d\n", params->codec_id);
+    return -1;
   }
 
   encoder->avcc = avcodec_alloc_context3(encoder->avc);
   if (!encoder->avcc) {
-    fprintf(stderr, "Could not allocate encoder context\n");
-    exit(1);
+    printf("Could not allocate encoder context\n");
+    return -1;
   }
 
   encoder->avcc->bit_rate = 1000;
@@ -122,26 +116,26 @@ int init(const char *filename) {
                 encoder->avcc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
   if (avcodec_open2(encoder->avcc, encoder->avc, NULL) < 0) {
-    fprintf(stderr, "Could not open encoder\n");
-    exit(1);
+    printf("Could not open encoder\n");
+    return -1;
   }
 
   encoder->avs = avformat_new_stream(encoder->avfc, NULL);
   if (avio_open(&encoder->avfc->pb, "output.mp4", AVIO_FLAG_WRITE) < 0) {
-    fprintf(stderr, "Could not create output video stream\n");
-    exit(1);
+    printf("Could not create output video stream\n");
+    return -1;
   }
 
   // Copy the codec parameters from the codec context to the stream's codecpar
   if (avcodec_parameters_from_context(encoder->avs->codecpar, encoder->avcc) <
       0) {
-    fprintf(stderr, "Failed to copy codec parameters to output stream\n");
-    exit(1);
+    printf("Failed to copy codec parameters to output stream\n");
+    return -1;
   }
 
   if (avformat_write_header(encoder->avfc, NULL) < 0) {
-    fprintf(stderr, "Could not write header for output file\n");
-    exit(1);
+    printf("Could not write header for output file\n");
+    return -1;
   }
 
   // setup sws
@@ -150,14 +144,15 @@ int init(const char *filename) {
                            encoder->avcc->height, AV_PIX_FMT_YUV420P,
                            SWS_BILINEAR, NULL, NULL, NULL);
   if (!sws_ctx) {
-    fprintf(stderr, "Could not get sws context\n");
-    exit(1);
+    printf("Could not get sws context\n");
+    return -1;
   }
 
   return 0;
 }
 
 int _transcode(std::string filename) {
+  av_log_set_callback(custom_log_callback);
   if (init(filename.c_str()) < 0) {
     return 1;
   }
@@ -175,7 +170,7 @@ int _transcode(std::string filename) {
   while (av_read_frame(decoder->avfc, dec_pkt) >= 0) {
     if (dec_pkt->stream_index == vid_idx) {
       if (avcodec_send_packet(decoder->avcc, dec_pkt) < 0) {
-        fprintf(stderr, "Could not send packet to decoder, cleaning up...\n");
+        printf("Could not send packet to decoder, cleaning up...\n");
         break;
       }
 
@@ -185,7 +180,7 @@ int _transcode(std::string filename) {
         if (rf_res == AVERROR(EAGAIN) || rf_res == AVERROR_EOF) {
           break;
         } else if (rf_res < 0) {
-          fprintf(stderr, "Decoder could not receive frame\n");
+          printf("Decoder could not receive frame\n");
           break;
         }
 
@@ -196,7 +191,7 @@ int _transcode(std::string filename) {
         enc_frame->pts = dec_frame->pts;
 
         if (avcodec_send_frame(encoder->avcc, enc_frame) < 0) {
-          fprintf(stderr, "Could not send frame to encoder\n");
+          printf("Could not send frame to encoder\n");
           break;
         }
 
@@ -206,7 +201,7 @@ int _transcode(std::string filename) {
           if (rp_res == AVERROR(EAGAIN) || rp_res == AVERROR_EOF) {
             break;
           } else if (rp_res < 0) {
-            fprintf(stderr, "Encoder could not receive encoded packet\n");
+            printf("Encoder could not receive encoded packet\n");
             break;
           }
 
@@ -214,8 +209,8 @@ int _transcode(std::string filename) {
           av_packet_rescale_ts(enc_pkt, decoder->avs->time_base, encoder->avs->time_base); // important
 
           if (av_write_frame(encoder->avfc, enc_pkt) < 0) {
-            fprintf(stderr, "Could not write frame to encoded packet\n");
-            exit(1);
+            printf("Could not write frame to encoded packet\n");
+            return -1;
           }
 
           av_packet_unref(enc_pkt);
