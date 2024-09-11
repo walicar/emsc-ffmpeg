@@ -262,6 +262,8 @@ int _transcode(std::string filename) {
   avcodec_free_context(&decoder->avcc);
   avcodec_free_context(&encoder->avcc);
   sws_freeContext(sws_ctx);
+  free(encoder);
+  free(decoder);
   return 0;
 }
 
