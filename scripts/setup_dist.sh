@@ -42,9 +42,7 @@ if [ ! -d "./dist" ]; then
     emmake make install
     cd ..
     
-    pwd # remove
     echo "Downloading x264"
-    # cd ./dist/tmp
     wget https://download.videolan.org/pub/videolan/x264/snapshots/x264-snapshot-${x264_ver}.tar.bz2
     tar xfj x264-snapshot-${x264_ver}.tar.bz2
 
