@@ -39,6 +39,7 @@ MediaContext *encoder;
 MediaContext *decoder;
 
 char entry[512];
+bool is_callback_set = false;
 
 EM_JS(void, call_log, (const char *text), {
   console.log(UTF8ToString(text));
@@ -159,10 +160,10 @@ int init(const char *filename) {
 }
 
 int _transcode(std::string filename) {
-  av_log_set_callback(custom_log_callback);
-  if (init(filename.c_str()) < 0) {
-    return 1;
-  }
+  if (!is_callback_set)
+    av_log_set_callback(custom_log_callback);
+
+  if (init(filename.c_str()) < 0) return 1;
 
   AVFrame *dec_frame = av_frame_alloc();
   AVFrame *enc_frame = av_frame_alloc();
