@@ -19,8 +19,9 @@
     let reader = new FileReader();
 
     reader.addEventListener('loadend', () => {
-      FS.writeFile('video.mp4', new Uint8Array(reader.result));
-      Module.read();
+      var name = input.files[0].name;
+      FS.writeFile(name, new Uint8Array(reader.result));
+      Module.read(name);
     });
 
     reader.readAsArrayBuffer(input.files[0]);

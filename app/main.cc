@@ -13,9 +13,9 @@ EM_JS(void, call_log, (const char* text), {
 	element.textContent = UTF8ToString(text);
 });
 
-void _read() {
+void _read(std::string url) {
  	AVFormatContext *avfc = NULL;
-	avformat_open_input(&avfc, "video.mp4", NULL, NULL);
+	avformat_open_input(&avfc, url.c_str(), NULL, NULL);
 	avformat_find_stream_info(avfc, NULL);
 	int fps = avfc->streams[0]->avg_frame_rate.num;
 	char buf[512];
