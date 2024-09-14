@@ -11,4 +11,4 @@ main:
 	-o web/assets/out.js
 
 init:
-	bash setup_dist.sh
+	bash scripts/setup_dist.sh
