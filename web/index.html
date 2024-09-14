@@ -2,117 +2,19 @@
 <html>
 
 <head>
-  <title>ffmpeg-emsc</title>
-  <link rel="shortcut icon" type="image/svg+xml" href="/icon.svg?" />
-  <style>
-    input {
-      margin: 5px;
-    }
-
-    .container {
-      border: solid;
-      border-color: black;
-      display: flex;
-      flex-direction: column;
-      padding: 2px;
-      width: 700px;
-      height: 500px;
-    }
-
-    .item {
-      border: solid;
-      border-color: black;
-      flex-grow: 1;
-      margin: 2px;
-    }
-
-    #logs {
-      height: 650px;
-      padding: 5px;
-      overflow-y: scroll
-    }
-
-    #controls {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-
-    .control-item {
-      margin-left: 50px;
-    }
-
-    #dl {
-      text-align: center;
-    }
-
-  </style>
+  <title>ffmpeg-emsc-basic</title>
 </head>
 
 <body>
-  <h1>ffmpeg-emsc</h1>
-  <div class="container">
-    <div id="logs" class="item">
-      <span>Convert your file!</span>
-      <br>
-    </div>
-    <div id="controls" class="item">
-      <input class="control-item" id="file" type="file">
-      <input class="control-item" id="check" type="checkbox" checked>Auto scroll to bottom</input>
-      <a class="control-item" id="dl"></a>
-    </div>
-  </div>
+  <h1>ffmpeg-emsc-basic</h1>
+  <p><span id="output">Loading...</span></p>
 </body>
 
+<script src="assets/out.js"></script>
 <script>
-  // setup ffmpeg worker
-  const worker = new Worker('assets/worker.js');
-  const input = document.querySelector('input');
-  const logs = document.getElementById('logs')
-  const dl = document.getElementById("dl")
-  const check = document.getElementById("check")
-  var showTail = true;
-  var start;
-
-  input.addEventListener('change', onFileChange);
-  check.addEventListener('change', onCheckChange);
-  
-
-  worker.onmessage = (e) => {
-    const result = e.data;
-    if (result == "bad") {
-      document.getElementById("status").textContent = "Failed to transcode"
-    } else if (result[0] == "msg") {
-      var timestamp = Date(Date.now() - start).split(' ')[4];
-      var entry = document.createElement('span')
-      entry.textContent = timestamp + ": " + result[1];
-      logs.appendChild(entry);
-      logs.appendChild(document.createElement('br'))
-
-      if (showTail) {
-        logs.scrollTop = logs.scrollHeight
-      }
-
-    } else {
-      const url = URL.createObjectURL(result);
-      dl.href = url;
-      dl.download = 'output.mp4';
-      dl.textContent = "Download"
-    }
+  Module.onRuntimeInitialized = () => {
+    Module.read();
   }
-
-  function onFileChange(event) {
-    start = Date.now()
-    const file = input.files[0];
-    worker.postMessage([file]);
-    dl.textContent = "Transcoding..."
-  }
-
-  function onCheckChange(event) {
-    showTail = !showTail;
-  }
-
 </script>
-
 
 </html>

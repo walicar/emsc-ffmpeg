@@ -1,13 +1,11 @@
-# INITIAL_MEMORY = 35 MiB
 main:
-	emcc app/main.cc -lembind \
+	emcc app/main.cc \
 	-I./dist/include -L./dist/lib \
-	-lavcodec -lavformat -lavutil -lswscale -lswresample -lx264 -lvpx \
-	-s INITIAL_MEMORY=36700160 \
+	-lavformat -lavutil -lavcodec -lswresample \
+	-lembind \
+	-s INITIAL_MEMORY=26214400 \
 	-s ALLOW_MEMORY_GROWTH=1 \
-	-lembind -lworkerfs.js \
-    -pthread \
-	-flto \
+	--embed-file app/video.mp4@video.mp4 \
 	-o web/assets/out.js
 
 init:
