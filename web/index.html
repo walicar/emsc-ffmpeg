@@ -7,13 +7,23 @@
 
 <body>
   <h1>ffmpeg-emsc-basic</h1>
-  <p><span id="output">Loading...</span></p>
+  <p><span id="output">Waitng for file...</span></p>
+  <input id="input" type="file" onChange="onFileChange()">
 </body>
 
 <script src="assets/out.js"></script>
 <script>
-  Module.onRuntimeInitialized = () => {
-    Module.read();
+  const input = document.getElementById("input");
+  input.addEventListener("change", onFileChange);
+  function onFileChange() {
+    let reader = new FileReader();
+
+    reader.addEventListener('loadend', () => {
+      FS.writeFile('video.mp4', new Uint8Array(reader.result));
+      Module.read();
+    });
+
+    reader.readAsArrayBuffer(input.files[0]);
   }
 </script>
 
