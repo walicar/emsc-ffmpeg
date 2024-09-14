@@ -1,5 +1,5 @@
-# ffmpeg-emsc
-Client side transcoding video (.mp4, .mov, .mkv) to .mp4 using ffmpeg libraries to meet an 8MB size limit
+# ffmpeg-emsc basics
+Basic code to get started with ffmpeg and Emscripten
 
 ## Overview
 - `web/` contains all of the files that will be used to render website
