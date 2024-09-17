@@ -1,5 +1,5 @@
 {
-  "name": "ffmpeg-emsc",
+  "name": "emsc-ffmpeg",
   "version": "1.0.0",
   "type" : "module",
   "scripts": {

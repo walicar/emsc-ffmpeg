@@ -1,5 +1,5 @@
-# ffmpeg-emsc basics
-Basic code to get started with ffmpeg and Emscripten
+# emsc-ffmpeg basics
+Basic code to get started with Emscripten and ffmpeg
 
 ## Overview
 - `web/` contains all of the files that will be used to render website
