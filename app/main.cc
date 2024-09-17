@@ -27,12 +27,18 @@ const int DST_HEIGHT = 720;
 
 struct SwsContext *sws_ctx;
 int vid_idx = 0;
+int aud_idx = 1;
 
 typedef struct MediaContext {
   AVFormatContext *avfc;
-  const AVCodec *avc;
-  AVCodecContext *avcc;
-  AVStream *avs;
+
+  const AVCodec *video_avc;
+  AVCodecContext *video_avcc;
+  AVStream *video_avs;
+
+  const AVCodec *audio_avc;
+  AVCodecContext *audio_avcc;
+  AVStream *audio_avs;
 } MediaContext;
 
 MediaContext *encoder;
@@ -65,33 +71,41 @@ int init(const char *filename) {
   }
 
   vid_idx = av_find_best_stream(decoder->avfc, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
-  decoder->avs = decoder->avfc->streams[vid_idx];
+  aud_idx = av_find_best_stream(decoder->avfc, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0);
+  decoder->video_avs = decoder->avfc->streams[vid_idx];
+  decoder->audio_avs = decoder->avfc->streams[aud_idx];
+
+  // video
   AVCodecParameters *params = decoder->avfc->streams[vid_idx]->codecpar;
 
-  decoder->avc = avcodec_find_decoder(params->codec_id);
-  if (!decoder->avc) {
+  decoder->video_avc = avcodec_find_decoder(params->codec_id);
+  if (!decoder->video_avc) {
     printf("Cannot find decoder %d\n", params->codec_id);
     return -1;
   }
 
-  decoder->avcc = avcodec_alloc_context3(decoder->avc);
-  if (!decoder->avcc) {
+  decoder->video_avcc = avcodec_alloc_context3(decoder->video_avc);
+  if (!decoder->video_avcc) {
+  if (!decoder->video_avcc) {
     printf("Could not allocate decoder context\n");
     return -1;
   }
 
-  if (avcodec_parameters_to_context(decoder->avcc, params) < 0) {
+  if (avcodec_parameters_to_context(decoder->video_avcc, params) < 0) {
     printf("Could not copy decoder params to decoder context\n");
     return -1;
   }
 
-  decoder->avcc->pkt_timebase = decoder->avs->time_base;
-  decoder->avcc->framerate = av_guess_frame_rate(NULL, decoder->avs, NULL);
+  decoder->video_avcc->pkt_timebase = decoder->video_avs->time_base;
+  decoder->video_avcc->framerate = av_guess_frame_rate(NULL, decoder->video_avs, NULL);
 
-  if (avcodec_open2(decoder->avcc, decoder->avc, NULL) < 0) {
+  if (avcodec_open2(decoder->video_avcc, decoder->video_avc, NULL) < 0) {
     printf("Could not open decoder\n");
     return -1;
   }
+
+  // audio left off here.
+
 
   // setup output
   if (avformat_alloc_output_context2(&encoder->avfc, NULL, NULL, "output.mp4") <
@@ -268,6 +282,6 @@ int _transcode(std::string filename) {
   return 0;
 }
 
-EMSCRIPTEN_BINDINGS(ffmpeg_emsc) {
+EMSCRIPTEN_BINDINGS(emsc_ffmpeg) {
   emscripten::function("transcode", &_transcode);
 };

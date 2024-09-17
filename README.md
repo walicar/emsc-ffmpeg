@@ -1,4 +1,4 @@
-# ffmpeg-emsc
+# emsc-ffmpeg
 Client side transcoding video (.mp4, .mov, .mkv) to .mp4 using ffmpeg libraries to meet an 8MB size limit
 
 ## Overview
