@@ -25,38 +25,38 @@ extern "C" {
 const int DST_WIDTH = 1280;
 const int DST_HEIGHT = 720;
 
-struct SwsContext *sws_ctx;
+struct SwsContext* sws_ctx;
 int vid_idx = 0;
 int aud_idx = 1;
 
 typedef struct MediaContext {
-  AVFormatContext *avfc;
+  AVFormatContext* avfc;
 
-  const AVCodec *video_avc;
-  AVCodecContext *video_avcc;
-  AVStream *video_avs;
+  const AVCodec* video_avc;
+  AVCodecContext* video_avcc;
+  AVStream* video_avs;
 
-  const AVCodec *audio_avc;
-  AVCodecContext *audio_avcc;
-  AVStream *audio_avs;
+  const AVCodec* audio_avc;
+  AVCodecContext* audio_avcc;
+  AVStream* audio_avs;
 } MediaContext;
 
-MediaContext *encoder;
-MediaContext *decoder;
+MediaContext* encoder;
+MediaContext* decoder;
 
 char entry[512];
 bool is_callback_set = false;
 
-EM_JS(void, call_log, (const char *text), { console.log(UTF8ToString(text)); });
+EM_JS(void, call_log, (const char* text), { console.log(UTF8ToString(text)); });
 
-void custom_log_callback(void *ptr, int level, const char *fmt, va_list vargs) {
+void custom_log_callback(void* ptr, int level, const char* fmt, va_list vargs) {
   vsnprintf(entry, sizeof(entry), fmt, vargs);
   call_log(entry);
 }
 
-int init(const char *filename) {
-  decoder = (MediaContext *)malloc(sizeof(MediaContext));
-  encoder = (MediaContext *)malloc(sizeof(MediaContext));
+int init(const char* filename) {
+  decoder = (MediaContext*)malloc(sizeof(MediaContext));
+  encoder = (MediaContext*)malloc(sizeof(MediaContext));
 
   // setup input
   if (avformat_open_input(&decoder->avfc, filename, NULL, NULL) < 0) {
@@ -77,7 +77,7 @@ int init(const char *filename) {
   decoder->audio_avs = decoder->avfc->streams[aud_idx];
 
   // decoder video
-  AVCodecParameters *params = decoder->video_avs->codecpar;
+  AVCodecParameters* params = decoder->video_avs->codecpar;
 
   decoder->video_avc = avcodec_find_decoder(params->codec_id);
   if (!decoder->video_avc) {
@@ -107,7 +107,7 @@ int init(const char *filename) {
 
   // decoder audio
   params = decoder->audio_avs->codecpar;
-  
+
   decoder->audio_avc = avcodec_find_decoder(params->codec_id);
   if (!decoder->audio_avc) {
     printf("Cannot find decoder %d\n", params->codec_id);
@@ -231,38 +231,46 @@ int init(const char *filename) {
   return 0;
 }
 
-void encode_video(MediaContext* encoder, AVRational dec_time_base, AVPacket* enc_pkt, AVFrame* enc_frame) {
+void encode_video(MediaContext* encoder,
+                  AVRational dec_time_base,
+                  AVPacket* enc_pkt,
+                  AVFrame* enc_frame) {
   if (avcodec_send_frame(encoder->video_avcc, enc_frame) < 0) {
-      printf("Could not send frame to encoder\n");
+    printf("Could not send frame to video encoder\n");
+    return;
+  }
+
+  int rp_res = 0;
+  while (rp_res >= 0) {
+    rp_res = avcodec_receive_packet(encoder->video_avcc, enc_pkt);
+    if (rp_res == AVERROR(EAGAIN) || rp_res == AVERROR_EOF) {
+      break;
+    } else if (rp_res < 0) {
+      printf("Video encoder could not receive encoded packet\n");
+      break;
+    }
+
+    enc_pkt->stream_index = 0;
+    av_packet_rescale_ts(enc_pkt, dec_time_base,
+                         encoder->video_avs->time_base);  // important
+
+    if (av_write_frame(encoder->avfc, enc_pkt) < 0) {
+      printf("Could not write video frame to encoded packet\n");
       return;
     }
+  }
 
-    int rp_res = 0;
-    while (rp_res >= 0) {
-      rp_res = avcodec_receive_packet(encoder->video_avcc, enc_pkt);
-      if (rp_res == AVERROR(EAGAIN) || rp_res == AVERROR_EOF) {
-        break;
-      } else if (rp_res < 0) {
-        printf("Encoder could not receive encoded packet\n");
-        break;
-      }
-
-      enc_pkt->stream_index = 0;
-      av_packet_rescale_ts(enc_pkt, dec_time_base,
-                           encoder->video_avs->time_base); // important
-
-      if (av_write_frame(encoder->avfc, enc_pkt) < 0) {
-        printf("Could not write frame to encoded packet\n");
-        return;
-      }
-
-      av_packet_unref(enc_pkt);
-    }
+  av_packet_unref(enc_pkt);
 }
 
-void transcode_video(MediaContext* decoder, MediaContext* encoder, AVPacket* dec_pkt, AVFrame* dec_frame, AVPacket* enc_pkt, AVFrame* enc_frame) {
+void transcode_video(MediaContext* decoder,
+                     MediaContext* encoder,
+                     AVPacket* dec_pkt,
+                     AVFrame* dec_frame,
+                     AVPacket* enc_pkt,
+                     AVFrame* enc_frame) {
   if (avcodec_send_packet(decoder->video_avcc, dec_pkt) < 0) {
-    printf("Could not send packet to decoder, cleaning up...\n");
+    printf("Could not send packet to video decoder, cleaning up...\n");
     return;
   }
 
@@ -272,18 +280,75 @@ void transcode_video(MediaContext* decoder, MediaContext* encoder, AVPacket* dec
     if (rf_res == AVERROR(EAGAIN) || rf_res == AVERROR_EOF) {
       break;
     } else if (rf_res < 0) {
-      printf("Decoder could not receive frame\n");
+      printf("Video decoder could not receive frame\n");
       break;
     }
 
-    sws_scale(sws_ctx, (const uint8_t *const *)dec_frame->data,
+    sws_scale(sws_ctx, (const uint8_t* const*)dec_frame->data,
               dec_frame->linesize, 0, dec_frame->height, enc_frame->data,
               enc_frame->linesize);
 
     enc_frame->pts = dec_frame->pts;
     encode_video(encoder, decoder->video_avs->time_base, enc_pkt, enc_frame);
+    av_frame_unref(dec_frame);
+  }
+  av_packet_unref(dec_pkt);
+}
+
+void encode_audio(MediaContext* encoder,
+                  AVRational dec_time_base,
+                  AVPacket* enc_pkt,
+                  AVFrame* enc_frame) {
+  if (avcodec_send_frame(encoder->video_avcc, enc_frame) < 0) {
+    printf("Could not send frame to audio encoder\n");
+    return;
   }
 
+  int rp_res = 0;
+  while (rp_res >= 0) {
+    rp_res = avcodec_receive_packet(encoder->video_avcc, enc_pkt);
+    if (rp_res == AVERROR(EAGAIN) || rp_res == AVERROR_EOF) {
+      break;
+    } else if (rp_res < 0) {
+      printf("Audio encoder could not receive encoded packet\n");
+      break;
+    }
+
+    enc_pkt->stream_index = 1;
+    av_packet_rescale_ts(enc_pkt, dec_time_base, encoder->audio_avs->time_base);
+
+    if (av_write_frame(encoder->avfc, enc_pkt) < 0) {
+      printf("Could not write audio frame to encoded packet\n");
+      return;
+    }
+  }
+  av_packet_unref(enc_pkt);
+}
+
+void transcode_audio(MediaContext* decoder,
+                     MediaContext* encoder,
+                     AVPacket* dec_pkt,
+                     AVFrame* dec_frame,
+                     AVPacket* enc_pkt,
+                     AVFrame* enc_frame) {
+  if (avcodec_send_packet(decoder->audio_avcc, dec_pkt) < 0) {
+    printf("Could not send packet to audio decoder\n");
+    return;
+  }
+
+  int rf_res = 0;
+  while (rf_res >= 0) {
+    rf_res = avcodec_receive_frame(decoder->audio_avcc, dec_frame);
+    if (rf_res == AVERROR(EAGAIN) || rf_res == AVERROR_EOF) {
+      break;
+    } else if (rf_res < 0) {
+      printf("Audio decoder could not receive frame\n");
+    }
+
+    enc_frame->pts = dec_frame->pts;
+    encode_audio(encoder, decoder->audio_avs->time_base, enc_pkt, enc_frame);
+    av_frame_unref(dec_frame);
+  }
   av_packet_unref(dec_pkt);
 }
 
@@ -294,24 +359,32 @@ int _transcode(std::string filename) {
   if (init(filename.c_str()) < 0)
     return 1;
 
-  AVFrame *dec_frame = av_frame_alloc();
-  AVFrame *enc_frame = av_frame_alloc();
+  AVFrame* dec_frame = av_frame_alloc();
+  AVFrame* enc_frame = av_frame_alloc();
   enc_frame->format = AV_PIX_FMT_YUV420P;
   enc_frame->width = encoder->video_avcc->width;
   enc_frame->height = encoder->video_avcc->height;
   av_frame_get_buffer(enc_frame, 32);
 
-  AVPacket *dec_pkt = av_packet_alloc();
-  AVPacket *enc_pkt = av_packet_alloc();
+  AVPacket* dec_pkt = av_packet_alloc();
+  AVPacket* enc_pkt = av_packet_alloc();
 
   while (av_read_frame(decoder->avfc, dec_pkt) >= 0) {
     if (dec_pkt->stream_index == vid_idx) {
       transcode_video(decoder, encoder, dec_pkt, dec_frame, enc_pkt, enc_frame);
+    } else if (dec_pkt->stream_index == aud_idx) {
+      transcode_audio(decoder, encoder, dec_pkt, dec_frame, enc_pkt, enc_frame);
     }
   }
 
-  transcode_video(decoder, encoder, NULL, dec_frame, enc_pkt, enc_frame); // flush video decoder
-  encode_video(encoder, decoder->video_avs->time_base, NULL, enc_frame);  // flush video encoder
+  transcode_video(decoder, encoder, NULL, dec_frame, enc_pkt,
+                  enc_frame);  // flush video decoder
+  encode_video(encoder, decoder->video_avs->time_base, NULL,
+               enc_frame);  // flush video encoder
+  transcode_audio(decoder, encoder, NULL, dec_frame, enc_pkt,
+                  enc_frame);  // flush audio decoder
+  encode_audio(encoder, decoder->video_avs->time_base, NULL,
+               enc_frame);  // flush audio encoder
 
   av_write_trailer(encoder->avfc);
 
