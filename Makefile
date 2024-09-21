@@ -10,5 +10,8 @@ main:
 	-flto \
 	-o web/assets/out.js
 
+format:
+	clang-format -i app/main.cc --style="chromium"
+
 init:
 	bash scripts/setup_dist.sh
