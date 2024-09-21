@@ -58,6 +58,7 @@ int init(const char *filename) {
   decoder = (MediaContext *)malloc(sizeof(MediaContext));
   encoder = (MediaContext *)malloc(sizeof(MediaContext));
 
+  // setup input
   if (avformat_open_input(&decoder->avfc, filename, NULL, NULL) < 0) {
     printf("Could not open input file to get format\n");
     return -1;
@@ -75,8 +76,8 @@ int init(const char *filename) {
   decoder->video_avs = decoder->avfc->streams[vid_idx];
   decoder->audio_avs = decoder->avfc->streams[aud_idx];
 
-  // video
-  AVCodecParameters *params = decoder->avfc->streams[vid_idx]->codecpar;
+  // decoder video
+  AVCodecParameters *params = decoder->video_avs->codecpar;
 
   decoder->video_avc = avcodec_find_decoder(params->codec_id);
   if (!decoder->video_avc) {
@@ -104,15 +105,39 @@ int init(const char *filename) {
     return -1;
   }
 
-  // TODO: transcode audio
+  // decoder audio
+  params = decoder->audio_avs->codecpar;
+  
+  decoder->audio_avc = avcodec_find_decoder(params->codec_id);
+  if (!decoder->audio_avc) {
+    printf("Cannot find decoder %d\n", params->codec_id);
+    return -1;
+  }
 
-  // setup encoder
+  decoder->audio_avcc = avcodec_alloc_context3(decoder->audio_avc);
+  if (!decoder->audio_avcc) {
+    printf("Could not allocate decoder context\n");
+    return -1;
+  }
+
+  if (avcodec_parameters_to_context(decoder->audio_avcc, params) < 0) {
+    printf("Could not copy decoder params to decoder context\n");
+    return -1;
+  }
+
+  if (avcodec_open2(decoder->audio_avcc, decoder->audio_avc, NULL) < 0) {
+    printf("Could not open decoder\n");
+    return -1;
+  }
+
+  // setup output
   if (avformat_alloc_output_context2(&encoder->avfc, NULL, NULL, "output.mp4") <
       0) {
     printf("Could not open output file to get format\n");
     return -1;
   }
 
+  // encoder video
   encoder->video_avc = avcodec_find_encoder_by_name("libx264");
   if (!encoder->video_avc) {
     printf("Cannot find encoder %d\n", params->codec_id);
@@ -133,24 +158,57 @@ int init(const char *filename) {
   encoder->video_avs->time_base = encoder->video_avcc->time_base;
   encoder->video_avcc->pix_fmt = AV_PIX_FMT_YUV420P;
 
-  if (encoder->avfc->oformat->flags & AVFMT_GLOBALHEADER)
-    encoder->video_avcc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-
   if (avcodec_open2(encoder->video_avcc, encoder->video_avc, NULL) < 0) {
     printf("Could not open encoder\n");
     return -1;
   }
-
   encoder->video_avs = avformat_new_stream(encoder->avfc, NULL);
-  if (avio_open(&encoder->avfc->pb, "output.mp4", AVIO_FLAG_WRITE) < 0) {
-    printf("Could not create output video stream\n");
+
+  if (avcodec_parameters_from_context(encoder->video_avs->codecpar,
+                                      encoder->video_avcc) < 0) {
+    printf("Failed to copy video codec parameters to output stream\n");
     return -1;
   }
 
-  // Copy the codec parameters from the codec context to the stream's codecpar
-  if (avcodec_parameters_from_context(encoder->video_avs->codecpar,
-                                      encoder->video_avcc) < 0) {
-    printf("Failed to copy codec parameters to output stream\n");
+  // encoder audio
+  encoder->audio_avc = avcodec_find_encoder_by_name("aac");
+  if (!encoder->video_avc) {
+    printf("Cannot find encoder %d\n", params->codec_id);
+    return -1;
+  }
+
+  encoder->audio_avcc = avcodec_alloc_context3(encoder->audio_avc);
+  if (!encoder->audio_avcc) {
+    printf("Could not allocate encoder context\n");
+    return -1;
+  }
+
+  encoder->audio_avcc->ch_layout = decoder->audio_avcc->ch_layout;
+  encoder->audio_avcc->sample_rate = decoder->audio_avcc->sample_rate;
+  encoder->audio_avcc->sample_fmt = encoder->audio_avc->sample_fmts[0];
+  encoder->audio_avcc->bit_rate = 98000;
+  encoder->audio_avcc->time_base = decoder->audio_avcc->time_base;
+  encoder->audio_avcc->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
+  encoder->audio_avs->time_base = encoder->audio_avcc->time_base;
+
+  if (avcodec_open2(encoder->audio_avcc, encoder->audio_avc, NULL) < 0) {
+    printf("Could not open encoder\n");
+    return -1;
+  }
+  encoder->audio_avs = avformat_new_stream(encoder->avfc, NULL);
+
+  if (avcodec_parameters_from_context(encoder->audio_avs->codecpar,
+                                      encoder->audio_avcc) < 0) {
+    printf("Failed to copy audio codec parameters to output stream\n");
+    return -1;
+  }
+
+  // wrap up
+  if (encoder->avfc->oformat->flags & AVFMT_GLOBALHEADER)
+    encoder->avfc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+  if (avio_open(&encoder->avfc->pb, "output.mp4", AVIO_FLAG_WRITE) < 0) {
+    printf("Could not create output video stream\n");
     return -1;
   }
 
