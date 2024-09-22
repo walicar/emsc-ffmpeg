@@ -187,7 +187,7 @@ int init(const char* filename) {
   encoder->audio_avcc->sample_rate = decoder->audio_avcc->sample_rate;
   encoder->audio_avcc->sample_fmt = encoder->audio_avc->sample_fmts[0];
   encoder->audio_avcc->bit_rate = 98000;
-  encoder->audio_avcc->time_base = decoder->audio_avcc->time_base;
+  encoder->audio_avcc->time_base = (AVRational){1, decoder->audio_avcc->sample_rate};
   encoder->audio_avcc->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
   encoder->audio_avs->time_base = encoder->audio_avcc->time_base;
 
@@ -250,7 +250,7 @@ void encode_video(MediaContext* encoder,
       break;
     }
 
-    enc_pkt->stream_index = 0;
+    enc_pkt->stream_index = vid_idx;
     av_packet_rescale_ts(enc_pkt, dec_time_base,
                          encoder->video_avs->time_base);  // important
 
@@ -299,14 +299,14 @@ void encode_audio(MediaContext* encoder,
                   AVRational dec_time_base,
                   AVPacket* enc_pkt,
                   AVFrame* enc_frame) {
-  if (avcodec_send_frame(encoder->video_avcc, enc_frame) < 0) {
+  if (avcodec_send_frame(encoder->audio_avcc, enc_frame) < 0) {
     printf("Could not send frame to audio encoder\n");
     return;
   }
 
   int rp_res = 0;
   while (rp_res >= 0) {
-    rp_res = avcodec_receive_packet(encoder->video_avcc, enc_pkt);
+    rp_res = avcodec_receive_packet(encoder->audio_avcc, enc_pkt);
     if (rp_res == AVERROR(EAGAIN) || rp_res == AVERROR_EOF) {
       break;
     } else if (rp_res < 0) {
@@ -314,7 +314,7 @@ void encode_audio(MediaContext* encoder,
       break;
     }
 
-    enc_pkt->stream_index = 1;
+    enc_pkt->stream_index = vid_idx;
     av_packet_rescale_ts(enc_pkt, dec_time_base, encoder->audio_avs->time_base);
 
     if (av_write_frame(encoder->avfc, enc_pkt) < 0) {
@@ -370,6 +370,7 @@ int _transcode(std::string filename) {
   AVPacket* enc_pkt = av_packet_alloc();
 
   while (av_read_frame(decoder->avfc, dec_pkt) >= 0) {
+    printf("stream_idx: %d\n", dec_pkt->stream_index);
     if (dec_pkt->stream_index == vid_idx) {
       transcode_video(decoder, encoder, dec_pkt, dec_frame, enc_pkt, enc_frame);
     } else if (dec_pkt->stream_index == aud_idx) {
