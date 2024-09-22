@@ -1,3 +1,14 @@
+/* Resources used:
+@ffmpeg
+https://github.com/leandromoreira/ffmpeg-libav-tutorial/blob/master/3_transcoding.c
+https://github.com/FFmpeg/FFmpeg/blob/master/doc/examples/transcode.c
+
+@emsc
+https://github.com/alfg/ffprobe-wasm
+https://itnext.io/build-ffmpeg-webassembly-version-ffmpeg-js-part-2-compile-with-emscripten-4c581e8c9a16
+https://github.com/ffmpegwasm/ffmpeg.wasm/blob/main/build/ffmpeg.sh
+*/
+
 #include <emscripten.h>
 #include <emscripten/bind.h>
 #include <inttypes.h>
@@ -187,7 +198,8 @@ int init(const char* filename) {
   encoder->audio_avcc->sample_rate = decoder->audio_avcc->sample_rate;
   encoder->audio_avcc->sample_fmt = encoder->audio_avc->sample_fmts[0];
   encoder->audio_avcc->bit_rate = 98000;
-  encoder->audio_avcc->time_base = (AVRational){1, decoder->audio_avcc->sample_rate};
+  encoder->audio_avcc->time_base =
+      (AVRational){1, decoder->audio_avcc->sample_rate};
   encoder->audio_avcc->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
   encoder->audio_avs->time_base = encoder->audio_avcc->time_base;
 
