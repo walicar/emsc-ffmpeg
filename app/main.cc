@@ -26,11 +26,11 @@ extern "C" {
 #include <libavcodec/defs.h>
 #include <libavcodec/packet.h>
 #include <libavformat/avformat.h>
+#include <libavutil/audio_fifo.h>
 #include <libavutil/avutil.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/log.h>
 #include <libavutil/rational.h>
-#include <libavutil/audio_fifo.h>
 #include <libswscale/swscale.h>
 };
 
@@ -232,16 +232,12 @@ int init(const char* filename) {
   }
 
   // set up fifo to store "to be encoded" samples
-  fifo = av_audio_fifo_alloc(
-    encoder->audio_avcc->sample_fmt,
-    encoder->audio_avcc->ch_layout.nb_channels,
-    1
-  );
+  fifo = av_audio_fifo_alloc(encoder->audio_avcc->sample_fmt,
+                             encoder->audio_avcc->ch_layout.nb_channels, 1);
 
   if (!fifo) {
     printf("Could not get sws context\n");
     return -1;
-
   }
 
   // setup sws
