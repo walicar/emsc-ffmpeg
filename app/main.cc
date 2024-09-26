@@ -30,6 +30,7 @@ extern "C" {
 #include <libavutil/imgutils.h>
 #include <libavutil/log.h>
 #include <libavutil/rational.h>
+#include <libavutil/audio_fifo.h>
 #include <libswscale/swscale.h>
 };
 
@@ -54,6 +55,7 @@ typedef struct MediaContext {
 
 MediaContext* encoder;
 MediaContext* decoder;
+AVAudioFifo* fifo;
 
 char entry[512];
 bool is_callback_set = false;
@@ -227,6 +229,19 @@ int init(const char* filename) {
   if (avformat_write_header(encoder->avfc, NULL) < 0) {
     printf("Could not write header for output file\n");
     return -1;
+  }
+
+  // set up fifo to store "to be encoded" samples
+  fifo = av_audio_fifo_alloc(
+    encoder->audio_avcc->sample_fmt,
+    encoder->audio_avcc->ch_layout.nb_channels,
+    1
+  );
+
+  if (!fifo) {
+    printf("Could not get sws context\n");
+    return -1;
+
   }
 
   // setup sws
