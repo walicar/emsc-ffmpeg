@@ -31,6 +31,7 @@ extern "C" {
 #include <libavutil/imgutils.h>
 #include <libavutil/log.h>
 #include <libavutil/rational.h>
+#include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
 };
 
@@ -38,6 +39,7 @@ const int DST_WIDTH = 1280;
 const int DST_HEIGHT = 720;
 
 struct SwsContext* sws_ctx;
+struct SwrContext* swr_ctx;
 int vid_idx = 0;
 int aud_idx = 1;
 
@@ -55,7 +57,6 @@ typedef struct MediaContext {
 
 MediaContext* encoder;
 MediaContext* decoder;
-AVAudioFifo* fifo;
 
 char entry[512];
 bool is_callback_set = false;
@@ -202,7 +203,6 @@ int init(const char* filename) {
   encoder->audio_avcc->bit_rate = 98000;
   encoder->audio_avcc->time_base =
       (AVRational){1, decoder->audio_avcc->sample_rate};
-  encoder->audio_avcc->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
   encoder->audio_avs->time_base = encoder->audio_avcc->time_base;
 
   if (avcodec_open2(encoder->audio_avcc, encoder->audio_avc, NULL) < 0) {
@@ -231,15 +231,6 @@ int init(const char* filename) {
     return -1;
   }
 
-  // set up fifo to store "to be encoded" samples
-  fifo = av_audio_fifo_alloc(encoder->audio_avcc->sample_fmt,
-                             encoder->audio_avcc->ch_layout.nb_channels, 1);
-
-  if (!fifo) {
-    printf("Could not get sws context\n");
-    return -1;
-  }
-
   // setup sws
   sws_ctx =
       sws_getContext(decoder->video_avcc->width, decoder->video_avcc->height,
@@ -251,6 +242,14 @@ int init(const char* filename) {
     return -1;
   }
 
+  // setup swr
+  swr_alloc_set_opts2(
+      &swr_ctx, &encoder->audio_avcc->ch_layout,
+      encoder->audio_avcc->sample_fmt, encoder->audio_avcc->sample_rate,
+      &decoder->audio_avcc->ch_layout, decoder->audio_avcc->sample_fmt,
+      decoder->audio_avcc->sample_rate, 0, NULL);
+  
+  swr_init(swr_ctx);
   return 0;
 }
 
@@ -337,7 +336,7 @@ void encode_audio(MediaContext* encoder,
       break;
     }
 
-    enc_pkt->stream_index = vid_idx;
+    enc_pkt->stream_index = aud_idx;
     av_packet_rescale_ts(enc_pkt, dec_time_base, encoder->audio_avs->time_base);
 
     if (av_write_frame(encoder->avfc, enc_pkt) < 0) {
@@ -369,6 +368,8 @@ void transcode_audio(MediaContext* decoder,
     }
 
     enc_frame->pts = dec_frame->pts;
+    enc_frame->nb_samples = dec_frame->nb_samples; // ?
+    swr_convert(swr_ctx, enc_frame->data, enc_frame->nb_samples, (const uint8_t* const*)dec_frame->data, dec_frame->nb_samples);
     encode_audio(encoder, decoder->audio_avs->time_base, enc_pkt, enc_frame);
     av_frame_unref(dec_frame);
   }
@@ -422,6 +423,7 @@ int _transcode(std::string filename) {
   avcodec_free_context(&decoder->video_avcc);
   avcodec_free_context(&encoder->video_avcc);
   sws_freeContext(sws_ctx);
+  swr_free(&swr_ctx);
   free(encoder);
   free(decoder);
   return 0;
