@@ -249,7 +249,13 @@ int init(const char* filename) {
       &decoder->audio_avcc->ch_layout, decoder->audio_avcc->sample_fmt,
       decoder->audio_avcc->sample_rate, 0, NULL);
   
+  
   swr_init(swr_ctx);
+
+  if (!swr_ctx) {
+    printf("Could not get swr context\n");
+    return -1;
+  }
   return 0;
 }
 
