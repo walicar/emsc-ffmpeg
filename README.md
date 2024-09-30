@@ -1,5 +1,5 @@
 # emsc-ffmpeg
-Client side transcoding video (.mp4, .mov, .mkv) to .mp4 using ffmpeg libraries on the web.
+Client side transcoding .mp4 video using ffmpeg libraries on the web.
 
 ## Overview
 - `web/` contains all of the files that will be used to render website
