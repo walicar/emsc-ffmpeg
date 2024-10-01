@@ -8,18 +8,10 @@ var dir = path.join(import.meta.dirname, "..");
 
 app.use(
   "/assets",
-  express.static(path.join(dir, "web/assets"), {
-    setHeaders: (res, _) => 
-      res.setHeader("Cross-Origin-Embedder-Policy", "require-corp")
-    ,
-  })
+  express.static(path.join(dir, "web/assets"), {})
 );
 
 app.get("/", (_, res) => {
-  // Required headers for pthread: https://emscripten.org/docs/porting/pthreads.html
-  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
-  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
-  res.setHeader("Cross-Origin-Resource-Policy", "same-site");
   res.sendFile(path.join(dir, "web/index.html"));
 });
 
