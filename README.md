@@ -4,7 +4,7 @@ Client side transcoding .mp4 video using ffmpeg libraries on the web.
 ## Overview
 - `web/` contains all of the files that will be used to render website
 - `test/` contains code to run a local server, use `npm run dev` to start this server
-- `scripts/` contains build script to generate libvpx, x264, ffmpeg wasm object files
+- `scripts/` contains build script to generate x264, ffmpeg wasm object files
 - `app/` contains `main.cc`
 
 ## Dependencies
